@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="pl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rozkład Śrem</title>
+<style>
+:root{--bg:#f5f6f8;--c:#fff;--t:#1b1f24;--m:#667;--a:#c8102e;--b:#dde1e6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14161a;--c:#1f2329;--t:#eceff3;--m:#9aa;--b:#333a43}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:16px system-ui,sans-serif;padding:14px;max-width:560px;margin:auto}
+h1{font-size:20px;margin:4px 0 12px}
+.card{background:var(--c);border-radius:12px;padding:12px;margin-bottom:12px}
+label{font-size:13px;color:var(--m)}
+input{width:100%;font-size:17px;padding:11px;border:1px solid var(--b);border-radius:8px;background:var(--bg);color:var(--t);margin:4px 0 10px}
+.row{display:flex;gap:8px}button{font-size:15px;padding:10px 12px;border:1px solid var(--b);border-radius:8px;background:var(--c);color:var(--t);flex:1}
+button.on{background:var(--a);color:#fff;border-color:var(--a)}
+.r{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--b)}
+.r:first-child{border-top:0}.past{opacity:.4}
+.n{background:var(--a);color:#fff;border-radius:8px;min-width:40px;text-align:center;padding:6px 0;font-weight:700}
+.tm{font-size:19px;font-weight:600}.sub{font-size:13px;color:var(--m)}.next .tm{color:var(--a)}
+.warn{background:#fde8e8;color:#a00;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:14px}.offt{color:#d00}.gray{opacity:.45;filter:grayscale(1)}.leg{font-size:12px;line-height:1.5}
+.tl{max-height:38vh;overflow:auto;border-left:3px solid var(--a);margin:10px 0 0 8px;padding-left:12px}
+.st{position:relative;display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:14px}.st i{position:absolute;left:-19px;top:10px;width:9px;height:9px;border-radius:50%;background:var(--a)}.st.end{font-weight:700}.st.off{color:#d00}.st.off i{background:#d00}
+</style></head><body>
+<h1>Rozkład jazdy Śrem</h1>
+<div class="warn">⚠ Przystanek Piłsudskiego czasowo wyłączony z obsługi (remont mostu).</div>
+<div class="card">
+<label for="a">Skąd</label><input id="a" list="st" placeholder="np. Piłsudskiego" autocomplete="off">
+<label for="b">Dokąd</label><input id="b" list="st" placeholder="np. Olsza I" autocomplete="off">
+<datalist id="st"></datalist>
+<div class="row"><button id="sw">⇅ Zamień</button><button data-d="R">Dni robocze</button><button data-d="S">Sobota</button></div>
+</div>
+<div id="out" class="card sub">Wybierz oba przystanki.</div>
+<div id="map" class="card"></div>
+<div class="card sub leg"><b>Legenda:</b><br><span style="color:#d00">Czerwony</span>: przystanek czasowo wyłączony z obsługi (remont mostu).<br><b>Szary</b>: nieaktywny.<br>* <b>Kurs sezonowy</b>: jeździ tylko od 1 maja do 31 października.</div>
+<script>
+// Format: [przystanek, "godziny kursów w dni robocze", "godziny w sobotę"]; "-" = kurs nie zatrzymuje się
+function P(n,t){return{n,rows:t.trim().split("\n").map(x=>x.split(";"))}}
+const L=[
+{n:"1",rows:[
+["Farna","- - - - - - 17:20 20:00","- -"],
+["Stary Rynek","05:30 - - 10:20 - - - -","08:00 -"],
+["Piłsudskiego","05:35 07:45 08:15 10:25 12:40 15:30 17:25 20:05","08:05 11:40"],
+["Kilińskiego I","05:37 07:47 08:17 10:27 12:42 15:33 17:27 20:07","08:07 11:42"],
+["Sikorskiego","05:38 07:48 08:18 10:28 12:43 15:34 17:28 20:08","08:08 11:43"],
+["Al. Solidarności I","05:39 07:49 08:19 10:29 12:44 15:35 17:29 20:09","08:09 11:44"],
+["Al. Solidarności II","05:41 07:51 08:21 10:31 12:46 15:37 17:31 20:11","08:11 11:46"],
+["Kilińskiego III","05:44 07:54 08:24 10:34 12:49 15:41 17:34 20:14","08:14 11:49"],
+["Chłapowskiego I","05:46 07:56 08:26 10:36 12:51 15:43 17:36 20:16","08:16 11:51"],
+["Chłapowskiego II","05:48 07:58 08:28 10:38 12:53 15:45 17:38 20:18","08:18 11:53"],
+["Staszica I","05:50 08:00 08:30 10:40 12:55 15:47 17:40 20:20","08:20 11:55"],
+["Gostyńska I","05:52 08:02 08:32 10:42 12:57 15:49 17:42 20:22","08:22 11:57"],
+["Mickiewicza III","05:54 08:04 08:34 10:44 12:59 15:51 17:44 20:24","08:24 11:59"],
+["Mickiewicza II","05:55 08:05 08:35 10:45 13:00 15:52 17:45 20:25","08:25 12:00"],
+["Mickiewicza I","05:57 08:07 08:37 10:47 13:02 15:54 17:47 20:26","08:27 12:02"],
+["Piłsudskiego","05:59 08:09 08:39 10:49 13:04 15:56 17:49 20:28","08:29 12:04"]]},
+{n:"2",rows:[
+["Piłsudskiego","07:40 09:25 13:35 16:55","09:25 12:30"],
+["Mickiewicza I","07:42 09:27 13:37 16:57","09:27 12:32"],
+["Mickiewicza II","07:43 09:28 13:38 16:58","09:28 12:33"],
+["Mickiewicza III","07:45 09:30 13:40 17:00","09:30 12:35"],
+["Gostyńska I","07:47 09:32 13:42 17:02","09:32 12:37"],
+["Staszica II nż.","07:49 09:34 13:44 17:04","09:34 12:39"],
+["Staszica I","07:50 09:35 13:45 17:05","09:35 12:40"],
+["Chłapowskiego II","07:52 09:37 13:47 17:07","09:37 12:42"],
+["Grota Roweckiego","07:54 09:38 13:49 -","- -"],
+["Chłapowskiego I","07:58 09:42 13:53 17:08","09:38 12:43"],
+["Kilińskiego III","08:00 09:44 13:55 17:10","09:40 12:45"],
+["Grunwaldzka","08:02 09:46 13:57 17:12","09:42 12:47"],
+["Wojska Polskiego","08:05 09:49 14:00 17:15","09:45 12:50"],
+["Kilińskiego II","08:06 09:50 14:01 17:16","09:46 12:51"],
+["Kilińskiego I","08:07 09:51 14:02 17:17","09:47 12:52"],
+["Piłsudskiego","08:10 09:54 14:05 17:20","09:50 12:55"],
+["Farna","- - 14:08 -","- -"]]},
+{n:"3",rows:[
+["Piłsudskiego","06:35 12:05"],["Mickiewicza I","06:37 12:07"],["Mickiewicza II","06:38 12:08"],["Mickiewicza III","06:40 12:10"],
+["Gostyńska I","06:42 12:12"],["Gostyńska II","06:43 12:13"],["Rolna","06:45 12:15"],["Sosnowiec","06:48 12:18"],
+["Łęg","06:51 12:21"],["Bystrzek","06:53 12:23"],["Olsza I","06:56 12:26"],["Olsza II","06:59 12:28"],
+["Chrząstowo I nż.","07:01 12:30"],["Chrząstowo II nż.","07:03 12:32"],["Chrząstowo III nż.","07:05 12:34"],
+["Dobczyn I nż.","07:08 12:37"],["Dobczyn","07:12 12:40"],["Chrząstowo III nż.","07:16 12:44"],
+["Chrząstowo II nż.","07:18 12:46"],["Chrząstowo I nż.","07:20 12:48"],["Pysząca I","07:25 12:53"],
+["Pysząca II","07:26 12:54"],["Borgowo","07:29 12:57"],["Grzymysław I","07:33 13:01"],["Grzymysław II","07:36 13:04"],
+["Grzymysław III","07:38 13:06"],["Staszica I","07:41 13:09"],["Gostyńska I","07:43 13:11"],
+["Mickiewicza III","07:45 13:13"],["Mickiewicza II","07:46 13:15"],["Mickiewicza I","07:47 13:16"],["Piłsudskiego","07:49 13:18"]]},
+P("4",`Stary Rynek;- 15:25
+Piłsudskiego;07:35 15:30
+Mickiewicza I;07:37 15:32
+Mickiewicza II;07:38 15:33
+Mickiewicza III;07:40 15:35
+Gostyńska I;07:42 15:37
+Staszica I;07:45 15:40
+Grzymysław III;07:48 15:43
+Grzymysław II;07:50 15:45
+Grzymysław I;07:53 15:48
+Borgowo;07:57 15:52
+Pysząca II;08:00 15:54
+Pysząca I;08:02 15:56
+Pysząca III;08:03 15:57
+Sosnowiec;08:05 15:59
+Łęg;08:09 16:03
+Bystrzek;08:11 16:05
+Olsza I;08:13 16:07
+Olsza II;08:14 16:08
+Chrząstowo I nż.;08:15 16:10
+Chrząstowo II nż.;08:16 16:12
+Chrząstowo III nż.;08:17 16:14
+Dobczyn I nż.;- 16:18
+Dobczyn;- 16:20
+Chrząstowo III nż.;- 16:24
+Chrząstowo II nż.;- 16:25
+Chrząstowo I nż.;- 16:27
+Rolna;08:29 16:34
+Grzymysław nż.;08:30 16:36
+Gostyńska I;08:31 16:38
+Mickiewicza III;08:33 16:40
+Mickiewicza II;08:34 16:42
+Mickiewicza I;08:35 16:43
+Stary Rynek;08:38 -
+Piłsudskiego;- 16:45`),
+P("9",`Farna;09:00 -
+Piłsudskiego;09:05 16:30
+Zbrudzewo;09:10 16:35
+Niesłabin ul. Osiedlowa nż.;09:15 16:40
+Niesłabin;09:17 16:42
+Orkowo;09:23 16:48
+Niesłabin;09:27 16:52
+Niesłabin ul. Osiedlowa nż.;09:28 16:53
+Zbrudzewo;09:33 16:58
+Piłsudskiego;09:40 17:05
+Mickiewicza I;09:42 17:07
+Mickiewicza II;09:43 17:08
+Mickiewicza III;09:45 17:10
+Gostyńska I;09:47 17:12
+Staszica II nż.;09:49 17:14
+Staszica I;09:50 17:15
+Chłapowskiego II;09:51 17:17
+Chłapowskiego I;09:52 17:19
+Kilińskiego III;09:54 17:21
+Grunwaldzka;09:58 17:25
+Wojska Polskiego;10:02 17:29
+Kilińskiego II;10:04 17:31
+Kilińskiego I;10:05 17:32
+Stary Rynek;10:10 17:35`),
+P("5",`Piłsudskiego;06:15 11:45
+Kilińskiego I;06:17 11:47
+Wojska Polskiego;06:21 11:51
+Grunwaldzka;06:25 11:55
+Kilińskiego III;06:27 11:57
+Nochowo III nż.;06:29 11:59
+Nochówko II;06:32 12:02
+Nochówko I;06:33 12:03
+Pełczyn;06:35 12:05
+Wirginowo III;06:39 12:09
+Wirginowo II;06:41 12:11
+Wirginowo I;06:43 12:13
+Bodzyniewo;06:45 12:15
+Bodzyniewo nż.;06:46 12:16
+Kadzewo;06:49 12:19
+Mórka;06:54 12:24
+Mórka nż.;06:56 12:26
+Jeleńczewo nż.;06:57 12:27
+Dalewo III nż.;06:58 12:28
+Dalewo;06:59 12:29
+Dalewo II;07:00 12:30
+Dalewo I;07:02 12:32
+Wyrzeka;07:05 12:35
+Nochowo II;07:10 12:40
+Nochowo III nż.;07:12 12:42
+Kilińskiego III;07:19 12:44
+Kilińskiego II;07:21 12:46
+Kilińskiego I;07:23 12:47
+Piłsudskiego;07:26 12:50`),
+P("5",`Piłsudskiego;08:00 14:30 17:10
+Kilińskiego I;08:02 14:32 17:12
+Wojska Polskiego;08:06 14:36 17:16
+Grunwaldzka;08:10 14:40 17:20
+Kilińskiego III;08:12 14:43 17:22
+Nochowo III nż.;08:14 14:45 17:24
+Nochówko II;08:16 14:47 17:26
+Wyrzeka;08:21 14:52 17:31
+Dalewo I;08:24 14:55 17:34
+Dalewo;08:27 14:58 17:37
+Dalewo III nż.;08:28 14:59 17:38
+Jeleńczewo nż.;08:29 15:00 17:39
+Mórka nż.;08:30 15:01 17:40
+Mórka;08:32 15:03 17:42
+Kadzewo;08:37 15:07 17:47
+Bodzyniewo nż.;08:40 15:10 17:50
+Bodzyniewo;08:41 15:11 17:51
+Wirginowo I;08:43 15:13 17:53
+Wirginowo II;08:45 15:15 17:55
+Wirginowo III;08:47 15:17 17:57
+Pełczyn;08:51 15:21 18:01
+Nochówko I;08:53 15:23 18:03
+Nochówko II;08:54 15:24 18:04
+Nochowo III nż.;08:57 15:27 18:07
+Kilińskiego III;08:59 15:29 18:09
+Kilińskiego II;09:01 15:32 18:13
+Kilińskiego I;09:04 15:35 18:15
+Piłsudskiego;09:07 15:38 18:18`),
+P("6",`Piłsudskiego;06:20
+Zbrudzewo;06:26
+Niesłabin ul. Osiedlowa nż.;06:34
+Niesłabin;06:36
+Orkowo;06:42
+Czmoniec ul. Goździkowa;06:47
+Czmoń ul. Strażacka;06:49
+Kaleje;06:53
+Luciny II nż.;06:57
+Luciny I;06:59
+Dąbrowa I;07:03
+Dąbrowa;07:04
+Mechlin;07:08
+Mechlin ul. Śremska nż.;07:10
+Mechlin I nż.;07:12
+Piłsudskiego;07:15
+Kilińskiego I;07:17
+Sikorskiego;07:18
+Al. Solidarności I;07:19
+Al. Solidarności II;07:21
+Kilińskiego III;07:24
+Chłapowskiego I;07:26
+Chłapowskiego II;07:28
+Staszica I;07:30
+Gostyńska I;07:32
+Mickiewicza III;07:34
+Mickiewicza II;07:35
+Mickiewicza I;07:37
+Piłsudskiego;07:39`),
+P("6",`Farna;10:55 - -
+Piłsudskiego;11:00 16:15 18:10
+Mechlin I nż.;11:03 16:18 18:13
+Mechlin nż.;11:04 16:19 18:14
+Mechlin ul. Śremska nż.;11:05 16:20 18:15
+Mechlin;11:07 16:22 18:17
+Dąbrowa;11:11 16:26 18:21
+Dąbrowa I;11:12 16:27 18:22
+Luciny I;11:16 16:31 18:26
+Luciny II nż.;11:17 16:32 18:27
+Kaleje;11:21 16:36 18:31
+Czmoń ul. Strażacka;11:25 16:40 18:35
+Czmoniec ul. Goździkowa;11:29 16:44 18:39
+Orkowo;11:33 16:48 18:43
+Niesłabin;11:35 16:50 18:45
+Niesłabin ul. Osiedlowa nż.;11:37 16:52 18:47
+Zbrudzewo;11:43 16:58 18:53
+Piłsudskiego;11:50 17:05 19:00
+Kilińskiego I;11:52 17:08 19:02
+Sikorskiego;11:53 17:09 19:03
+Al. Solidarności I;11:54 17:10 19:04
+Al. Solidarności II;11:56 17:12 19:06
+Kilińskiego III;11:59 17:16 19:09
+Chłapowskiego I;12:01 17:18 19:11
+Chłapowskiego II;12:03 17:20 19:13
+Staszica I;12:05 17:22 19:15
+Gostyńska I;12:07 17:24 19:17
+Mickiewicza III;12:09 17:26 19:19
+Mickiewicza II;12:10 17:27 19:20
+Mickiewicza I;12:11 17:28 19:21
+Piłsudskiego;12:13 17:30 19:23`),
+P("7",`Stary Rynek;07:55 09:55 - -;10:00 15:05
+Piłsudskiego;08:00 10:00 15:15 17:00;10:10 15:10
+Mickiewicza I;08:02 10:02 15:19 17:02;10:12 15:12
+Mickiewicza II;08:03 10:03 15:20 17:03;10:13 15:13
+Mickiewicza III;08:05 10:05 15:22 17:05;10:15 15:15
+Gostyńska I;08:07 10:07 15:24 17:07;10:17 15:17
+Staszica II nż.;08:09 10:09 15:26 17:09;10:19 15:19
+Staszica I;08:10 10:10 15:27 17:10;10:20 15:20
+Chłapowskiego II;08:12 10:12 15:29 17:12;10:22 15:22
+Chłapowskiego I;08:14 10:14 15:31 17:14;10:24 15:24
+Kilińskiego III;08:16 10:16 15:33 17:16;10:26 15:26
+Kilińskiego II;08:18 10:18 15:35 17:18;10:28 15:28
+Kilińskiego I;08:19 10:19 15:36 17:19;10:29 15:29
+Sikorskiego;08:21 10:21 15:38 17:21;10:31 15:31
+Al. Solidarności I;08:23 10:23 15:40 17:23;10:33 15:33
+Chełmońskiego nż.;08:24 10:24 15:41 17:24;10:34 15:34
+Chełmońskiego I nż.;08:25 10:25 15:42 17:25;10:35 15:35
+Malczewskiego I;08:26 10:26 15:43 17:26;10:36 15:36
+Malczewskiego II;08:27 10:27 15:44 17:27;10:37 15:37`),
+P("7",`Malczewskiego II;09:00 11:20 16:22 18:00;11:10 16:10
+Malczewskiego I;09:01 11:21 16:23 18:01;11:11 16:11
+Chełmońskiego nż.;09:03 11:22 16:24 18:02;11:12 16:12
+Al. Solidarności I;09:05 11:23 16:25 18:03;11:13 16:13
+Sikorskiego;09:07 11:25 16:27 18:05;11:15 16:15
+Kilińskiego II;09:09 11:28 16:30 18:08;11:18 16:18
+Kilińskiego III;09:11 11:30 16:32 18:10;11:20 16:20
+Chłapowskiego I;09:13 11:32 16:34 18:12;11:22 16:22
+Chłapowskiego II;09:15 11:34 16:36 18:14;11:24 16:24
+Staszica I;09:17 11:36 16:38 18:16;11:26 16:26
+Gostyńska I;09:19 11:38 16:40 18:18;11:28 16:28
+Mickiewicza III;09:21 11:40 16:42 18:20;11:30 16:30
+Mickiewicza II;09:22 11:41 16:43 18:21;11:31 16:31
+Mickiewicza I;09:23 11:42 16:44 18:22;11:32 16:32
+Piłsudskiego;09:24 11:44 16:46 18:24;11:34 16:34`),
+P("10",`Piłsudskiego;08:55 18:00
+Kilińskiego I;08:57 18:02
+Sikorskiego;08:58 18:03
+Al. Solidarności I;08:59 18:04
+Chełmońskiego nż.;09:00 18:05
+Chełmońskiego I nż.;09:01 18:06
+Nochowo ul. Podgaje nż.;09:03 18:08
+Gaj nż.;09:06 18:11
+Gaj I nż.;09:08 18:13
+Gaj II nż.;09:09 18:14
+Błociszewo I;09:13 18:18
+Błociszewo II;09:14 18:19
+Krzyżanowo;09:19 18:24
+Pucołowo;09:22 18:27
+Manieczki;09:24 18:29
+Szymanowo;09:28 18:33
+Psarskie IV;09:30 18:35
+Psarskie III;09:32 18:37
+Psarskie I;09:33 18:38
+Sikorskiego;09:35 18:40
+Piłsudskiego;09:38 18:43
+Farna;09:43 -`),
+P("10",`Farna;- 14:25
+Piłsudskiego;06:40 14:30
+Kilińskiego I;06:42 14:34
+Sikorskiego;06:43 14:35
+Sikorskiego nż.;06:44 14:36
+Psarskie I;06:45 14:37
+Psarskie III;06:47 14:39
+Psarskie IV;06:49 14:41
+Szymanowo;06:51 14:43
+Manieczki;06:55 14:47
+Pucołowo;06:57 14:49
+Krzyżanowo;07:01 14:53
+Błociszewo II;07:07 14:59
+Błociszewo I;07:08 15:00
+Gaj I;07:13 15:05
+Gaj nż.;07:15 15:07
+Nochowo ul. Podgaje nż.;07:19 15:11
+Chełmońskiego nż.;07:20 15:12
+Al. Solidarności I;07:21 15:13
+Sikorskiego;07:22 15:14
+Piłsudskiego;07:25 15:17`),
+P("8",`Piłsudskiego;05:05 06:25 13:40 15:00 16:40 18:20
+Mickiewicza I;05:08 06:27 13:42 15:02 16:42 18:22
+Mickiewicza II;05:09 06:28 13:43 15:03 16:43 18:23
+Mickiewicza III;05:10 06:30 13:45 15:05 16:45 18:25
+Gostyńska I;05:11 06:31 13:47 15:07 16:47 18:27
+Staszica II nż.;05:12 06:32 13:49 15:08 16:49 18:29
+Staszica I;05:13 06:33 13:50 15:11 16:50 18:30
+Chłapowskiego II;05:15 06:35 13:52 15:13 16:52 18:32
+Chłapowskiego I;05:17 06:37 13:54 15:15 16:54 18:34
+Kilińskiego III;05:19 06:39 13:56 15:18 16:56 18:36
+Al. Solidarności II;05:21 06:41 13:58 15:20 16:58 18:38
+Al. Solidarności I;05:22 06:42 13:59 15:21 16:59 18:39
+Sikorskiego nż.;05:24 06:44 14:01 15:23 17:01 18:41
+Psarskie I;05:26 06:46 14:03 15:25 17:03 18:43
+Psarskie III;05:28 06:48 14:05 15:27 17:05 18:45
+Psarskie Al. Platanowa nż.;05:29 06:49 14:06 15:28 17:06 18:46
+Psarskie IV DPS;05:31 06:51 14:08 15:30 17:08 18:48
+Góra;05:35 06:55 14:12 15:34 17:12 18:52
+Góra Huby nż.;05:38 06:56 14:15 15:37 17:15 18:55
+Jaszkowo;05:40 06:57 14:17 15:39 17:17 18:57`),
+P("8",`Jaszkowo;05:50 07:08 14:40 15:51 17:29 19:09
+Góra Huby nż.;05:53 07:09 14:43 15:54 17:32 19:12
+Góra;05:56 07:10 14:46 15:57 17:35 19:15
+Psarskie V nż.;05:57 07:11 14:47 15:58 17:36 19:16
+Psarskie IV DPS;06:00 07:14 14:50 16:01 17:39 19:19
+Psarskie Al. Platanowa nż.;06:02 07:15 14:51 16:02 17:40 19:20
+Psarskie III;06:04 07:17 14:53 16:04 17:42 19:22
+Psarskie I;06:07 07:20 14:56 16:07 17:45 19:25
+Al. Solidarności I;06:08 07:23 14:59 16:10 17:48 19:28
+Al. Solidarności II;06:09 07:24 15:01 16:12 17:49 19:29
+Kilińskiego III;06:12 07:27 15:05 16:17 17:52 19:32
+Chłapowskiego I;06:14 07:29 15:08 16:20 17:54 19:34
+Chłapowskiego II;06:16 07:31 15:10 16:22 17:56 19:36
+Staszica I;06:18 07:33 15:13 16:24 17:58 19:38
+Gostyńska I;06:20 07:35 15:16 16:26 18:00 19:40
+Mickiewicza III;06:22 07:37 15:18 16:28 18:02 19:42
+Mickiewicza II;06:23 07:38 15:19 16:29 18:03 19:43
+Mickiewicza I;06:24 07:39 15:20 16:30 18:04 19:44
+Piłsudskiego;06:26 07:41 15:22 16:32 18:06 19:46`),
+P("11",`Piłsudskiego;05:50
+Mickiewicza I;05:52
+Mickiewicza II;05:53
+Mickiewicza III;05:54
+Staszica I;05:58
+Grunwaldzka;06:00
+Kilińskiego III;06:02
+Nochowo III nż.;06:04
+Nochówko II;06:05
+Nochówko I;06:07
+Pełczyn;06:10
+Gawrony;06:11
+Międzychód IV nż.;06:12
+Międzychód III nż.;06:13
+Międzychód II;06:14
+Międzychód I nż.;06:17
+Pinka;06:21
+Masłowo II;06:23
+Masłowo I;06:25
+Nowieczek II;06:26
+Nowieczek I;06:30
+Rusocin II;06:33
+Feliksowo;06:36
+Rusocin I;06:39
+Wieszczyczyn;06:42
+Drzonek II;06:44
+Drzonek I;06:45
+Ostrowo II;06:46
+Ostrowo I;06:48
+Borgowo;06:52
+Grzymysław nż.;06:53
+Gostyńska I;06:55
+Mickiewicza III;06:57
+Mickiewicza II;06:58
+Mickiewicza I;06:59
+Piłsudskiego;07:01`),
+P("11",`Piłsudskiego;15:40
+Mickiewicza I;15:41
+Mickiewicza II;15:42
+Mickiewicza III;15:43
+Gostyńska I;15:45
+Staszica I;15:47
+Grzymysław III;15:50
+Grzymysław II;15:52
+Grzymysław I;15:55
+Borgowo;15:59
+Ostrowo I;16:03
+Ostrowo II;16:05
+Drzonek I;16:07
+Drzonek II;16:09
+Wieszczyczyn;16:12
+Rusocin I;16:15
+Feliksowo;16:17
+Rusocin II;16:19
+Nowieczek I;16:22
+Nowieczek II;16:24
+Masłowo I;16:26
+Masłowo II;16:29
+Pinka;16:31
+Międzychód I nż.;16:32
+Międzychód II;16:33
+Międzychód III nż.;16:34
+Międzychód IV nż.;16:35
+Gawrony;16:36
+Pełczyn;16:39
+Nochówko I;16:41
+Nochówko II;16:42
+Nochowo III nż.;16:45
+Kilińskiego III;16:47
+Kilińskiego II;16:49
+Kilińskiego I;16:50
+Piłsudskiego;16:54`),
+P("12",`Piłsudskiego;07:14;08:40
+Kilińskiego I;07:16;08:42
+Sikorskiego;07:17;08:43
+Sikorskiego nż.;07:18;08:44
+Psarskie I;07:19;08:45
+Psarskie III;07:21;08:47
+Psarskie Al. Platanowa nż.;07:22;08:48
+Psarskie IV DPS;07:23;08:49
+Psarskie Al. Platanowa nż.;07:24;08:50
+Psarskie III;07:25;08:51
+Psarskie I;07:27;08:53
+Al. Solidarności I;07:30;08:56
+Al. Solidarności II;07:32;08:59
+Wojska Polskiego;07:36;09:03
+Mickiewicza III;07:39;09:06
+Mickiewicza II;07:41;09:08
+Mickiewicza I;07:42;09:09
+Piłsudskiego;07:46;09:13`),
+P("12",`Piłsudskiego;10:00 10:50 13:30
+Kilińskiego I;10:02 10:52 13:33
+Wojska Polskiego;10:06 10:56 13:37
+Grunwaldzka;10:10 11:00 13:41
+Al. Solidarności II;10:12 11:02 13:44
+Al. Solidarności I;10:13 11:03 13:45
+Sikorskiego nż.;10:15 11:05 13:47
+Psarskie I;10:17 11:07 13:49
+Psarskie III;10:19 11:09 13:51
+Psarskie Al. Platanowa nż.;10:20 11:10 13:52
+Psarskie IV DPS;10:21 11:11 13:53
+Psarskie Al. Platanowa nż.;10:22 11:12 13:54
+Psarskie III;10:23 11:13 13:55
+Psarskie I;10:25 11:15 13:57
+Al. Solidarności I;10:28 11:18 14:00
+Al. Solidarności II;10:29 11:19 14:01
+Grunwaldzka;10:31 11:21 14:03
+Staszica I;10:33 11:23 14:05
+Gostyńska I;10:34 11:24 14:06
+Mickiewicza III;10:36 11:26 14:08
+Mickiewicza II;10:37 11:27 14:09
+Mickiewicza I;10:38 11:28 14:10
+Piłsudskiego;10:41 11:29 14:13`),
+P("12",`Piłsudskiego;;13:00
+Kilińskiego I;;13:02
+Wojska Polskiego;;13:06
+Grunwaldzka;;13:10
+Al. Solidarności II;;13:13
+Al. Solidarności I;;13:15
+Sikorskiego nż.;;13:16
+Psarskie I;;13:18
+Psarskie III;;13:20
+Psarskie Al. Platanowa nż.;;13:22
+Psarskie IV DPS;;13:23
+Psarskie Al. Platanowa nż.;;13:24
+Psarskie III;;13:25
+Psarskie I;;13:26
+Al. Solidarności I;;13:29
+Al. Solidarności II;;13:31
+Kilińskiego II;;13:32
+Kilińskiego I;;13:35
+Piłsudskiego;;13:36`),
+P("13",`Piłsudskiego;05:15 13:05
+Mickiewicza I;05:16 13:07
+Mickiewicza II;05:17 13:08
+Mickiewicza III;05:18 13:10
+Gostyńska I;05:19 13:12
+Staszica II nż.;05:20 13:14
+Staszica I;05:21 13:15
+Chłapowskiego II;05:23 13:17
+Chłapowskiego I;05:24 13:19
+Kilińskiego III;05:26 13:21
+Al. Solidarności II;05:28 13:23
+Al. Solidarności I;05:29 13:25
+Sikorskiego;05:30 13:26
+Piłsudskiego;05:34 13:30
+Mechlin I nż.;05:38 13:34
+Zbrudzewo ul. Średzka;05:42 13:38
+Zbrudzewo ul. Średzka I;05:47 13:43
+Mechlin Leopol;05:51 13:47
+Zbrudzewo ul. Średzka nż.;05:53 13:49
+Mechlin I nż.;05:55 13:51
+Zbrudzewo ul. Średzka II;05:56 13:52
+Piłsudskiego;06:00 13:56
+Kilińskiego I;06:03 13:59
+Kilińskiego II;06:05 14:02
+Kilińskiego III;06:07 14:04`),
+P("13",`Kilińskiego III;13:55 21:43
+Kilińskiego II;13:57 21:45
+Kilińskiego I;13:59 21:47
+Stary Rynek;- 21:50
+Piłsudskiego;14:06 21:55
+Mechlin I nż.;14:10 21:59
+Zbrudzewo ul. Średzka I;14:16 22:05
+Mechlin Leopol;14:20 22:09
+Zbrudzewo ul. Średzka;14:24 22:13
+Mechlin I nż.;14:25 22:14
+Zbrudzewo ul. Średzka II;14:26 22:15
+Piłsudskiego;14:33 22:18
+Kilińskiego I;14:35 22:19
+Sikorskiego;14:37 22:21
+Al. Solidarności I;14:39 22:23
+Al. Solidarności II;14:41 22:24
+Kilińskiego III;14:44 22:25
+Chłapowskiego I;14:46 22:27
+Chłapowskiego II;14:47 22:28
+Staszica I;14:50 22:29
+Gostyńska I;14:52 22:30
+Mickiewicza III;14:54 22:31
+Mickiewicza II;14:55 22:32
+Mickiewicza I;14:56 22:33
+Stary Rynek;14:59 -
+Piłsudskiego;- 22:34`),
+P("14",`Piłsudskiego;05:20
+Kilińskiego I;05:22
+Sikorskiego;05:23
+Al. Solidarności I;05:24
+Al. Solidarności II;05:26
+Kilińskiego III;05:28
+Chłapowskiego I;05:31
+Chłapowskiego II;05:33
+Staszica I;05:35
+Gostyńska II nż.;05:37
+Wiosenna I nż.;05:40
+Wiosenna II;05:42
+Rolna;05:44
+Pysząca nż.;05:46
+Pysząca I;05:48
+Pysząca II nż.;05:49
+Borgowo;05:52
+Grzymysław nż.;05:55
+Staszica II nż.;05:58
+Staszica I;05:59
+Chłapowskiego II;06:01
+Chłapowskiego I;06:03
+Kilińskiego III;06:05
+Grunwaldzka;06:07
+Wojska Polskiego;06:10
+Kilińskiego II;06:12
+Kilińskiego I;06:13
+Piłsudskiego;06:16`),
+P("14",`Farna;13:35 -
+Stary Rynek;- 14:35
+Piłsudskiego;13:40 14:40
+Kilińskiego I;13:42 14:42
+Sikorskiego;13:43 14:43
+Al. Solidarności I;13:44 14:44
+Al. Solidarności II;13:46 14:46
+Kilińskiego III;13:48 14:48
+Chłapowskiego I;13:51 14:51
+Chłapowskiego II;13:53 14:53
+Staszica I;13:55 14:55
+Gostyńska II nż.;13:57 14:57
+Grzymysław nż.;14:01 15:01
+Borgowo;14:04 15:04
+Pysząca II nż.;14:06 15:06
+Pysząca I;14:07 15:07
+Pysząca nż.;14:09 15:09
+Wiosenna I nż.;14:11 15:11
+Wiosenna II;14:13 15:13
+Rolna;14:14 15:15
+Grzymysław nż.;14:17 15:16
+Staszica II nż.;14:22 15:21
+Staszica I;14:23 15:22
+Chłapowskiego II;14:25 15:24
+Chłapowskiego I;14:27 15:26
+Kilińskiego III;14:29 15:28
+Grunwaldzka;14:31 15:30
+Wojska Polskiego;14:34 15:33
+Kilińskiego II;14:36 15:35
+Al. Solidarności II;14:38 15:37
+Al. Solidarności I;14:40 15:39
+Sikorskiego;14:42 15:41
+Piłsudskiego;14:45 15:46`),
+P("15",`Farna;- 13:12 -
+Piłsudskiego;05:14 13:17 21:14
+Kilińskiego I;05:16 13:19 21:16
+Sikorskiego;05:17 13:20 21:17
+Al. Solidarności I;05:18 13:21 21:18
+Al. Solidarności II;05:20 13:23 21:20
+Grunwaldzka;05:25 13:28 21:25
+Chłapowskiego II;05:28 13:31 21:28
+Chłapowskiego I;05:30 13:33 21:30
+Nochowo III nż.;05:34 13:35 21:35
+Nochowo II;05:37 13:38 21:38
+Nochowo ul. Jesienna;05:40 13:41 21:41`),
+P("15",`Nochowo ul. Jesienna;06:05 14:05 22:05
+Nochowo II;06:07 14:08 22:08
+Nochowo III nż.;06:09 14:10 22:10
+Chłapowskiego II;06:13 14:14 22:14
+Chłapowskiego I;06:15 14:16 22:16
+Kilińskiego III;06:17 14:18 22:18
+Grunwaldzka;06:19 14:20 22:20
+Wojska Polskiego;06:22 14:23 22:23
+Kilińskiego II;06:24 14:25 22:25
+Al. Solidarności II;06:27 14:28 22:28
+Al. Solidarności I;06:29 14:30 22:30
+Sikorskiego;06:30 14:32 22:32
+Piłsudskiego;06:35 14:37 22:37`),
+P("17",`Piłsudskiego;06:05 09:35 16:00 18:15
+Kilińskiego I;06:07 09:37 16:02 18:17
+Sikorskiego;06:08 09:38 16:03 18:18
+Al. Solidarności I;06:09 09:39 16:04 18:19
+Al. Solidarności II;06:11 09:41 16:06 18:21
+Kilińskiego III;06:13 09:44 16:09 18:23
+Chłapowskiego I;06:15 09:46 16:13 18:25
+Chłapowskiego II;06:17 09:48 16:15 18:27
+Staszica I;06:19 09:50 16:17 18:29
+Gostyńska I;06:21 09:52 16:19 18:31
+Mickiewicza III;06:22 09:53 16:20 18:32
+Mickiewicza II;06:23 09:54 16:21 18:33
+Mickiewicza I;06:24 09:55 16:22 18:34
+Piłsudskiego;06:27 09:58 16:25 18:37
+Mechlin I nż.;06:30 10:01 16:28 18:40
+Luciny Skrzyż.;06:35 10:06 16:33 18:45
+Polesie;06:38 10:09 16:37 18:48
+Zaniemyśl Rynek;06:40 10:12 16:40 18:50
+Zaniemyśl Szkoła;06:42 10:15 16:42 18:52`),
+P("17",`Zaniemyśl Szkoła;06:55 10:28 16:53 18:57
+Zaniemyśl Rynek;06:57 10:30 16:55 19:00
+Polesie;07:00 10:34 16:59 19:04
+Luciny Skrzyż.;07:03 10:38 17:03 19:08
+Zbrudzewo ul. Średzka nż.;07:08 10:43 17:08 19:13
+Mechlin I nż.;07:09 10:44 17:09 19:14
+Piłsudskiego;07:14 10:49 17:14 19:19
+Mickiewicza I;07:16 10:51 17:16 19:21
+Mickiewicza II;07:17 10:52 17:17 19:22
+Mickiewicza III;07:18 10:54 17:19 19:24
+Gostyńska I;07:20 10:56 17:22 19:26
+Staszica II nż.;07:22 10:58 17:24 19:28
+Staszica I;07:23 10:59 17:25 19:29
+Chłapowskiego II;07:25 11:01 17:27 19:30
+Chłapowskiego I;07:27 11:03 17:29 19:32
+Kilińskiego III;07:29 11:05 17:32 19:34
+Al. Solidarności II;07:31 11:07 17:36 19:36
+Al. Solidarności I;07:32 11:08 17:37 19:37
+Sikorskiego;07:34 11:10 17:39 19:39
+Piłsudskiego;07:38 11:15 17:44 19:43
+Farna;07:43 - - -`),
+P("18",`Zbrudzewo ul. Brylantowa II;07:25 - -
+Zbrudzewo ul. Brylantowa I;07:27 - -
+Zbrudzewo ul. Ametystowa nż.;07:30 - -
+Mechlin I nż.;07:34 - -
+Piłsudskiego;07:39 - -
+Kilińskiego I;07:41 - -
+Kilińskiego II;07:43 - -
+Grunwaldzka;07:45 - -
+Staszica I;07:47 15:45 17:20
+Gostyńska I;07:48 15:46 17:21
+Mickiewicza III;07:50 15:48 17:23
+Mickiewicza II;07:51 15:49 17:24
+Mickiewicza I;07:52 15:50 17:25
+Piłsudskiego;07:55 15:53 17:28
+Mechlin I nż.;07:58 15:56 17:31
+Zbrudzewo ul. Ametystowa nż.;08:00 15:58 17:33
+Zbrudzewo ul. Brylantowa I;08:02 16:00 17:35
+Zbrudzewo ul. Brylantowa II;08:03 16:01 17:36`),
+P("18",`Zbrudzewo ul. Brylantowa II;08:20 16:03 17:40
+Zbrudzewo ul. Brylantowa I;08:22 16:05 17:42
+Zbrudzewo ul. Ametystowa nż.;08:25 16:08 17:45
+Mechlin I nż.;08:29 16:12 17:49
+Piłsudskiego;08:34 16:17 17:54
+Kilińskiego I;08:36 16:19 17:56
+Kilińskiego II;08:38 16:21 17:58
+Grunwaldzka;08:40 16:23 18:00
+Staszica I;08:42 16:25 18:02`),
+P("16",`Piłsudskiego;05:50 09:25 15:35 18:55
+Kilińskiego I;05:52 09:27 15:37 18:57
+Kilińskiego II;05:54 09:29 15:39 18:59
+Kilińskiego III;05:56 09:31 15:41 19:01
+Nochowo III nż.;05:58 09:33 15:43 19:03
+Nochowo II;06:00 09:35 15:45 19:05
+Wyrzeka;06:05 09:40 15:50 19:10
+Dalewo I;06:08 09:43 15:53 19:13
+Dalewo II;06:10 09:45 15:55 19:15
+Łuszkowo nż.;06:14 09:49 15:59 19:19
+Jerka Rondo;06:19 09:54 16:04 19:24
+Jerka os.Brzozowiec nż.;06:22 09:57 16:07 19:27
+Krzywiń Kościańska nż.;06:26 10:01 16:11 19:31
+Krzywiń Rynek;06:27 10:02 16:12 19:32
+Krzywiń Kościańska nż.;06:30 10:05 16:15 19:35
+Jerka os.Brzozowiec nż.;06:34 10:09 16:19 19:39
+Jerka Rondo;06:37 10:12 16:22 19:42
+Łuszkowo nż.;06:41 10:16 16:26 19:46
+Dalewo II;06:45 10:20 16:30 19:50
+Dalewo I;06:47 10:22 16:32 19:52
+Wyrzeka;06:50 10:25 16:35 19:55
+Nochowo II;06:55 10:30 16:40 20:00
+Nochowo III nż.;06:57 10:32 16:42 20:02
+Kilińskiego III;06:59 10:34 16:44 20:04
+Grunwaldzka;07:02 10:36 16:46 20:06
+Wojska Polskiego;07:05 10:39 16:49 20:09
+Kilińskiego II;07:07 10:41 16:51 20:11
+Kilińskiego I;07:09 10:42 16:52 20:12
+Piłsudskiego;07:12 10:45 16:55 20:15`)
+];
+const $=id=>document.getElementById(id);
+const names=[...new Set(L.flatMap(l=>l.rows.map(r=>r[0])))].sort((x,y)=>x.localeCompare(y,"pl"));
+$("st").innerHTML=names.map(n=>`<option value="${n}">`).join("");
+// Czasowo wyłączone przystanki (remont mostu). Po remoncie wyczyść tę listę.
+const OFF=new Set(["Piłsudskiego"]);
+// Kurs zastępczy: np. REPL["Piłsudskiego"]="Zastępczo: ..."; brak wpisu = brak informacji.
+const REPL={};
+// Kursy sezonowe: linia -> numery kolumn kursów (od 0) w dni robocze. Aktywne maj–październik.
+const SEASON={"7":[3]};
+const inSeason=(m=>m>=4&&m<=9)(new Date().getMonth());
+const dow=new Date().getDay();let day=dow==6?"S":"R";
+function trips(d){const k=d=="R"?1:2,o=[];
+ L.forEach(l=>{const rows=l.rows.filter(r=>r[k]);if(!rows.length)return;
+  const nc=rows[0][k].split(" ").length;
+  for(let c=0;c<nc;c++)o.push({n:l.n,z:d=="R"&&(SEASON[l.n]||[]).includes(c),s:rows.map(r=>[r[0],r[k].split(" ")[c]])});});
+ return o;}
+const fmt=m=>m<1?"teraz":m<60?m+" min":Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";
+const mins=t=>+t.slice(0,2)*60+ +t.slice(3);
+function render(){
+ document.querySelectorAll("[data-d]").forEach(b=>b.classList.toggle("on",b.dataset.d==day));
+ const a=$("a").value.trim(),b=$("b").value.trim(),out=$("out");
+ if(!names.includes(a)||!names.includes(b)){out.className="card sub";out.textContent="Wybierz oba przystanki z listy podpowiedzi.";drawMap(null);return;}
+ const res=[];
+ trips(day).forEach(t=>{const i=t.s.findIndex(x=>x[0]==a&&x[1]!="-");if(i<0)return;
+  const j=t.s.findIndex((x,k)=>k>i&&x[0]==b&&x[1]!="-");if(j<0)return;
+  res.push({n:t.n,d:t.s[i][1],r:t.s[j][1],z:t.z,p:t.s.slice(i,j+1)});});
+ res.sort((x,y)=>mins(x.d)-mins(y.d));
+ const now=new Date(),nm=now.getHours()*60+now.getMinutes(),today=(dow==6?"S":dow==0?"-":"R")==day;
+ let nxt=today?res.findIndex(r=>mins(r.d)>=nm&&!(r.z&&!inSeason)):-1;
+ out.className="card";
+ const warn=[...new Set([a,b].filter(x=>OFF.has(x)))].map(x=>`<div class="warn">⚠ Przystanek ${x} jest czasowo wyłączony z obsługi (remont mostu). ${REPL[x]||"Brak kursu zastępczego lub brak informacji o nim."}</div>`).join("");
+ out.innerHTML=warn+(res.length?res.map((r,i)=>`<div class="r ${today&&mins(r.d)<nm-5?"past":""} ${i==nxt?"next":""} ${r.z&&!inSeason?"gray":""}" data-i="${i}"><div class="n">${r.n}</div><div><div class="tm ${OFF.has(a)||OFF.has(b)||(today&&nm-mins(r.d)>0&&nm-mins(r.d)<=5)?"offt":""}">${r.d} → ${r.r}</div><div class="sub">${mins(r.r)-mins(r.d)} min${today&&mins(r.d)>=nm&&!(r.z&&!inSeason)?` · <b>Do odjazdu: ${fmt(mins(r.d)-nm)}</b>`:""}${today&&nm-mins(r.d)>0&&nm-mins(r.d)<=5&&!(r.z&&!inSeason)?` · <b style="color:#d00">Odjechał ${nm-mins(r.d)} min temu</b>`:""}${i==nxt?" · najbliższy":""}${r.z?(inSeason?" · kurs sezonowy*":" · nieaktywny do 1 maja*"):""}</div></div></div>`).join(""):'<span class="sub">Brak bezpośrednich kursów w tym dniu (bez przesiadek).</span>');
+ out.querySelectorAll(".r").forEach(e=>e.onclick=()=>drawMap(res[+e.dataset.i]));drawMap(res[nxt>=0?nxt:0]);
+}
+function drawMap(r){const m=$("map");
+ if(!r){m.innerHTML='<div class="sub">Tu pojawi się schemat trasy wybranego kursu.</div>';return;}
+ m.innerHTML='<div class="sub">Trasa: linia '+r.n+', '+r.d+' → '+r.r+' (kliknij kurs na liście)</div><div class="tl">'+r.p.map((s,k)=>`<div class="st ${OFF.has(s[0])?"off":""} ${k==0||k==r.p.length-1?"end":""}"><i></i><span>${s[0]}${OFF.has(s[0])?" (czasowo wyłączony)":""}</span><b>${s[1]=="-"?"":s[1]}</b></div>`).join("")+'</div>';}
+$("a").oninput=$("b").oninput=render;
+$("sw").onclick=()=>{const t=$("a").value;$("a").value=$("b").value;$("b").value=t;render();};
+document.querySelectorAll("[data-d]").forEach(x=>x.onclick=()=>{day=x.dataset.d;render();});
+render();setInterval(render,30000);
+</script></body></html>
